@@ -1,2 +1,6 @@
+# Rust artifacts
 /target
 **/*.rs.bk
+
+# log files
+*.log

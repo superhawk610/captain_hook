@@ -1,18 +1,18 @@
 use captain_hook::{
     self,
     Hook::{Connect, Spawn},
-    JobPool, Message,
+    Message, Pool,
 };
-use std::{rc::Rc, sync::Mutex};
+use std::rc::Rc;
 use ws::{self, Message as WSMessage};
 
 fn main() {
-    let pool = Rc::new(Mutex::new(JobPool::new()));
+    let pool = Rc::new(Pool::new());
 
     ws::listen("127.0.0.1:3000", |socket| {
-        let mut p = pool.lock().unwrap();
-        let job = p.register(socket);
-        let id = job.get_id();
+        println!("received connection");
+
+        let socket_id = pool.register(socket);
 
         let pool = Rc::clone(&pool);
         move |msg: WSMessage| {
@@ -23,15 +23,13 @@ fn main() {
 
             match incoming.action {
                 Spawn { arg } => {
-                    let output = captain_hook::spawn(&arg);
-                    let pool = pool.lock().unwrap();
-                    let job = pool.get(id).unwrap();
-                    job.set_output(output);
-                    job.run();
+                    println!("spawning {}", arg);
+                    pool.spawn(&arg, &socket_id);
                 }
                 Connect { id } => {
-                    let _job = &pool.lock().unwrap().get(id).unwrap();
-                    // TODO: connect to running job output
+                    println!("connecting to {}", id);
+                    pool.assign_socket_to_job(&socket_id, &id)
+                        .expect(&format!("couldn't connect to job {}", id));
                 }
                 _ => panic!("unrecognized hook"),
             }

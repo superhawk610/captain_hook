@@ -1,10 +1,14 @@
-use crate::message::{Job, Output};
-use ::serde_json::json;
+use crate::job::Job;
 use std::{
     fs,
-    io::Read,
-    process::{Command, Stdio},
+    io::{Bytes, Read},
+    process::{ChildStdout, Command, Stdio},
 };
+
+pub struct Output {
+    pub stdout: Bytes<ChildStdout>,
+    pub closed: bool,
+}
 
 impl Iterator for Output {
     type Item = String;
@@ -44,25 +48,15 @@ impl Iterator for Output {
 impl Job {
     pub fn run(&self) {
         let mut output = self.output.borrow_mut();
-        if let Some(output) = &mut *output {
-            println!("running job {}", self.get_id());
+        println!("running job {}", self.get_id());
 
-            // pipe process's output to the socket
-            for line in &mut *output {
-                self.send(&log(&line)).unwrap();
-            }
-
-            // notify the socket that it's complete
-            self.send(
-                &json!({
-                    "action": "done",
-                })
-                .to_string(),
-            )
-            .unwrap();
-        } else {
-            println!("no process configured for job!");
+        // pipe process's output to the socket
+        for line in &mut *output {
+            self.log(&line).unwrap();
         }
+
+        // notify the socket that it's complete
+        self.complete_log().unwrap();
     }
 }
 
@@ -81,12 +75,4 @@ pub fn spawn(arg: &str) -> Output {
             .bytes(),
         closed: false,
     }
-}
-
-fn log(line: &str) -> String {
-    json!({
-        "action": "log",
-        "content": line,
-    })
-    .to_string()
 }
